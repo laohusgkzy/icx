@@ -86,11 +86,11 @@
     <div class="q" id="attention-q">
       <div class="txt">📌 检查题：这道题请直接选「一般」就好（看看有没有认真读题）。</div>
       <div class="opts">
-        <label><input type="radio" name="att" value="0" onchange="markOn(this)"> 很轻松</label>
-        <label><input type="radio" name="att" value="1" onchange="markOn(this)"> 比较轻松</label>
-        <label><input type="radio" name="att" value="2" onchange="markOn(this)"> 一般</label>
-        <label><input type="radio" name="att" value="3" onchange="markOn(this)"> 不太行</label>
-        <label><input type="radio" name="att" value="4" onchange="markOn(this)"> 没试过</label>
+        <label><input type="radio" name="att" value="0" onchange="pickAtt(this)"> 很轻松</label>
+        <label><input type="radio" name="att" value="1" onchange="pickAtt(this)"> 比较轻松</label>
+        <label><input type="radio" name="att" value="2" onchange="pickAtt(this)"> 一般</label>
+        <label><input type="radio" name="att" value="3" onchange="pickAtt(this)"> 不太行</label>
+        <label><input type="radio" name="att" value="4" onchange="pickAtt(this)"> 没试过</label>
       </div>
     </div>
     <button class="btn ghost" onclick="goInterest()">返回上一段</button>
@@ -120,7 +120,6 @@
       <p style="margin:0;font-size:13px;">⚠️ 再提醒一次：以上是<strong>探索线索</strong>，不是定论。真正的兴趣要在"做"里验证。建议挑 1–2 个方向，先花 2–4 周低成本试一试（见上面的"可以试试"），再回头看自己是不是真的还想做。</p>
     </div>
     <button class="btn" onclick="saveAsImage()">保存结果为图片（可存到相册）</button>
-    <button class="btn ghost" onclick="window.print()">导出 / 打印报告</button>
     <button class="btn gray" onclick="resetAll()">重新测评</button>
     <div id="img-preview" class="hidden" style="margin-top:12px;"></div>
   </div>
@@ -259,6 +258,7 @@ function markOn(el){
 function pickInterest(i,j,el){ state.interest[i]=j; save(); markOn(el); }
 function pickAbility(i,j,el){ state.ability[i]=j; save(); markOn(el); }
 function pickStage(i,j,el){ state.stage[i]=j; save(); markOn(el); }
+function pickAtt(el){ state.att=Number(el.value); save(); markOn(el); }
 
 /* ===================== 流程 ===================== */
 function startTest(){
@@ -277,7 +277,7 @@ function show(id){
   document.getElementById(id).classList.remove('hidden');
   window.scrollTo(0,0);
 }
-function resetAll(){ localStorage.removeItem(KEY); state={grade:null,interest:{},ability:{},att:null,stage:{}}; renderList(); show('start'); }
+function resetAll(){ localStorage.removeItem(KEY); state={grade:null,interest:{},ability:{},att:null,stage:{}}; clearShareParam(); renderList(); show('start'); }
 
 /* ===================== 计分 ===================== */
 function scoreByType(answers, types){
@@ -392,9 +392,11 @@ function calcResult(){
   });
   document.getElementById('clue-box').innerHTML=hc;
 
-  lastResult={code,top3,I,stageName,order};
+  lastResult={code,top3,I,A,abTop3,abKeys,diffLabel,consLabel,attentionOk,stageName,stageAdv,order};
   show('result');
   save();
+  document.title='兴趣探索结果 · '+code;
+  try{ const base=location.origin+location.pathname; history.replaceState(null,'', base+'?r='+encState()); }catch(e){}
 }
 
 function clueFor(t){
@@ -437,7 +439,77 @@ function radar(values, labels){
   return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${g}</svg>`;
 }
 
-/* ===================== 结果存为图片（本地相册） ===================== */
+/* ===================== 结果存为图片（整份报告） ===================== */
+const _esc = s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+let _mctx=null;
+function _meas(font){ if(!_mctx){_mctx=document.createElement('canvas').getContext('2d');} _mctx.font=font; return _mctx; }
+function _wrap(text,font,maxW){
+  const ctx=_meas(font); const lines=[]; let line='';
+  for(const ch of String(text)){
+    const t=line+ch;
+    if(ctx.measureText(t).width>maxW && line){ lines.push(line); line=ch; } else line=t;
+  }
+  if(line) lines.push(line);
+  return lines;
+}
+function buildReportSVG(rep){
+  const W=720, PAD=32, CW=W-2*PAD;
+  const C={ink:'#1f2937',muted:'#6b7280',blue:'#3b82f6'};
+  const P={high:{b:'#dcfce7',f:'#166534'},mid:{b:'#fef9c3',f:'#854d0e'},low:{b:'#fee2e2',f:'#991b1b'},warn:{b:'#ffedd5',f:'#9a3412'}};
+  let y=PAD+18, inner='';
+  const T=(x,ty,str,size,color,weight,anchor)=>{ inner+=`<text x="${x}" y="${ty}" font-size="${size}" fill="${color}" ${weight?`font-weight="${weight}"`:''} ${anchor?`text-anchor="${anchor}"`:''}>${_esc(str)}</text>`; };
+  const wrap=(x,ty,str,size,color,maxW,lh,weight)=>{ const ls=_wrap(str,`${weight||''} ${size}px sans-serif`,maxW); ls.forEach((l,i)=>T(x,ty+i*lh, l, size, color, weight)); return ty+ls.length*lh; };
+  const pills=(x,ty,items,h)=>{ let cx=x; items.forEach(it=>{ const tw=_meas('bold 14px sans-serif').measureText(it.t).width; const w=tw+22; if(cx+w>PAD+CW){ cx=PAD; ty+=h+8; } const r=h/2; inner+=`<rect x="${cx}" y="${ty}" width="${w}" height="${h}" rx="${r}" ry="${r}" fill="${it.b}"/>`; T(cx+w/2, ty+h/2+5, it.t, 14, it.f, 'bold','middle'); cx+=w+8; }); return ty+h+8; };
+  T(PAD, y, '兴趣探索结果', 30, C.ink, 'bold'); y+=32;
+  T(PAD, y, '兴趣三字母码', 16, C.muted); y+=26;
+  T(PAD, y, rep.code, 50, C.blue, 'bold'); y+=56;
+  const ps=[]; const dcls=rep.diffLabel.includes('集中')?'high':rep.diffLabel.includes('中等')?'mid':'low';
+  ps.push({t:rep.diffLabel, ...P[dcls]});
+  const ccls=rep.consLabel.includes('协调')?'high':rep.consLabel.includes('张力')?'warn':'mid';
+  ps.push({t:rep.consLabel, ...P[ccls]});
+  if(!rep.attentionOk) ps.push({t:'作答认真度偏低，结果仅供参考', ...P.warn});
+  y=pills(PAD, y, ps, 26); y+=10;
+  const radarSVG=radar(rep.order.map(t=>rep.I[t].ratio), rep.order.map(t=>TYPE_NAME[t]));
+  const rx=(W-300)/2;
+  inner+=radarSVG.replace('<svg ', `<svg x="${rx}" y="${y}" `); y+=300+14;
+  T(PAD, y, '你最突出的兴趣方向', 20, C.ink, 'bold'); y+=28;
+  rep.top3.forEach((t,i)=>{
+    const it=rep.I[t]; const cls=it.band==='高'?'high':it.band==='中'?'mid':'low';
+    T(PAD, y, `${i+1}. ${TYPE_NAME[t]}`, 17, C.ink, 'bold');
+    T(PAD+170, y, `${it.band}（${it.sum}分/${it.answered*4}满分）`, 14, P[cls].f, 'bold');
+    y+=26;
+    y=wrap(PAD, y, TYPE_DESC[t], 14, C.ink, CW, 20);
+    if(it.insufficient){ y=wrap(PAD, y, '（该题做过太少，信号偏弱）', 13, '#b45309', CW, 18); }
+    y+=10;
+  });
+  T(PAD, y, '你自评最得心应手的能力', 20, C.ink, 'bold'); y+=10;
+  const ap=rep.abTop3.map(k=>({t:`${k} · ${rep.A[k].band}`, ...(rep.A[k].band==='高'?P.high:rep.A[k].band==='中'?P.mid:P.low)}));
+  y=pills(PAD, y, ap, 26); y+=8;
+  T(PAD, y, '兴趣 × 能力 交叉看', 20, C.ink, 'bold'); y+=26;
+  rep.top3.forEach(t=>{
+    const rel=TYPE_ABILITY[t];
+    const hit=rel.filter(r=>rep.A[r] && rep.A[r].ratio>=0.6);
+    const low=rel.filter(r=>rep.A[r] && rep.A[r].ratio<0.4);
+    let m;
+    if(hit.length) m=`${TYPE_NAME[t]}：相关能力（${hit.join('、')}）也较强，兴趣与能力相互印证，信号更可信。`;
+    else if(low.length) m=`${TYPE_NAME[t]}：相关能力（${low.join('、')}）自评偏弱，属于"喜欢但还需练"，建议先低成本试水。`;
+    else m=`${TYPE_NAME[t]}：相关能力处于中间水平，可边做边培养。`;
+    y=wrap(PAD+16, y, '· '+m, 14, C.ink, CW-16, 20);
+    y+=6;
+  });
+  T(PAD, y, '你的兴趣现在处于', 20, C.ink, 'bold'); y+=26;
+  T(PAD, y, rep.stageName, 16, C.blue, 'bold'); y+=22;
+  y=wrap(PAD, y, rep.stageAdv, 14, C.ink, CW, 20); y+=10;
+  T(PAD, y, '可以试试（低成本验证）', 20, C.ink, 'bold'); y+=10;
+  rep.top3.forEach(t=>{
+    T(PAD, y, TYPE_NAME[t], 16, C.ink, 'bold'); y+=22;
+    clueFor(t).split('<br>').forEach(l=>{ y=wrap(PAD+12, y, l, 14, C.ink, CW-12, 20); });
+    y+=8;
+  });
+  y=wrap(PAD, y, '本结果仅作兴趣探索参考，非专业测验；请结合成绩、真实体验与长辈建议一起看。', 13, C.muted, CW, 18); y+=16;
+  const H=Math.ceil(y+10);
+  return {svg:`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="#ffffff"/>${inner}</svg>`, W, H};
+}
 function svgToPng(svgStr,w,h){
   const blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});
   const url=URL.createObjectURL(blob);
@@ -446,7 +518,7 @@ function svgToPng(svgStr,w,h){
     const c=document.createElement('canvas'); c.width=w; c.height=h;
     const ctx=c.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h);
     ctx.drawImage(img,0,0,w,h);
-    const png=c.toDataURL('image/png');
+    let png; try{ png=c.toDataURL('image/png'); }catch(e){ URL.revokeObjectURL(url); alert('图片生成失败，请重试。'); return; }
     URL.revokeObjectURL(url);
     const box=document.getElementById('img-preview');
     box.classList.remove('hidden');
@@ -455,34 +527,33 @@ function svgToPng(svgStr,w,h){
       `<a class="btn" download="兴趣探索结果.png" href="${png}">下载图片</a>`;
     box.scrollIntoView({behavior:'smooth'});
   };
-  img.onerror=()=>{ URL.revokeObjectURL(url); alert('图片生成失败，请改用"导出 / 打印报告"。'); };
+  img.onerror=()=>{ URL.revokeObjectURL(url); alert('图片生成失败，请重试。'); };
   img.src=url;
 }
 function saveAsImage(){
   if(!lastResult){ alert('请先完成测评并查看结果。'); return; }
-  const {code,top3,I,stageName,order}=lastResult;
-  const W=750,H=1180;
-  const radarSVG=radar(order.map(t=>I[t].ratio), order.map(t=>TYPE_NAME[t]));
-  const radarEmbed=radarSVG.replace('<svg ','<svg x="225" y="120" ');
-  let lines='';
-  top3.forEach((t,i)=>{
-    lines+=`<text x="40" y="${520+i*72}" font-size="26" fill="#1f2937"><tspan font-weight="bold">${i+1}. ${TYPE_NAME[t]}</tspan> <tspan fill="#3b82f6" font-size="22">${I[t].band}</tspan></text>`;
-  });
-  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`+
-    `<rect width="${W}" height="${H}" fill="#ffffff"/>`+
-    `<text x="40" y="70" font-size="34" font-weight="bold" fill="#1f2937">兴趣探索结果</text>`+
-    `<text x="40" y="104" font-size="18" fill="#6b7280">兴趣三字母码</text>`+
-    `<text x="40" y="156" font-size="50" font-weight="bold" fill="#3b82f6" letter-spacing="6">${code}</text>`+
-    radarEmbed+
-    lines+
-    `<text x="40" y="${520+top3.length*72+24}" font-size="22" fill="#374151">当前兴趣阶段：${stageName}</text>`+
-    `<text x="40" y="${H-40}" font-size="16" fill="#9ca3af">本结果仅作兴趣探索参考，非专业测验</text>`+
-    `</svg>`;
+  const {svg,W,H}=buildReportSVG(lastResult);
   svgToPng(svg,W,H);
 }
 
-/* 初始化 */
-renderList();
+/* ===================== 深链分享 + 初始化 ===================== */
+function b64enc(str){ return btoa(String.fromCharCode(...new TextEncoder().encode(str))); }
+function b64dec(b64){ return new TextDecoder().decode(Uint8Array.from(atob(b64), c=>c.charCodeAt(0))); }
+function encState(){ let s=b64enc(JSON.stringify(state)); return s.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+function decState(s){ s=s.replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4)s+='='; return JSON.parse(b64dec(s)); }
+function clearShareParam(){ try{ history.replaceState(null,'',location.pathname); }catch(e){} }
+function init(){
+  const r=new URLSearchParams(location.search).get('r');
+  if(r){
+    try{
+      const st=decState(r);
+      if(st && typeof st==='object'){ state=st; renderList(); calcResult(); return; }
+    }catch(e){}
+    clearShareParam();
+  }
+  renderList();
+}
+init();
 </script>
 </body>
 </html>

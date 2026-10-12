@@ -281,12 +281,16 @@ function resetAll(){ localStorage.removeItem(KEY); state={grade:null,interest:{}
 
 /* ===================== 计分 ===================== */
 function scoreByType(answers, types){
-  // answers: {idx: optionIndex or null}; 返回各类型 {sum, answered, ratio, band, insufficient}
-  const map={}; types.forEach(t=>map[t]={sum:0,answered:0});
+  // answers: {idx: optionIndex}; types: {idx: typeKey}
+  // 返回各类型 {sum, answered, ratio, band, insufficient}
+  const map={};
+  Object.values(types).forEach(t=>{ if(!map[t]) map[t]={sum:0,answered:0}; });
   Object.keys(answers).forEach(k=>{
     const j=answers[k]; if(j===null||j===undefined) return;
+    const sc=OPT5_SCORE[j];
+    if(sc===null||sc===undefined) return; // “没试过”不计分也不计作答
     const t=types[k]; if(!t) return;
-    map[t].sum+=OPT5_SCORE[j]; map[t].answered++;
+    map[t].sum+=sc; map[t].answered++;
   });
   const out={};
   Object.keys(map).forEach(t=>{

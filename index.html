@@ -277,27 +277,40 @@ function show(id){
   document.getElementById(id).classList.remove('hidden');
   window.scrollTo(0,0);
 }
-function resetAll(){ localStorage.removeItem(KEY); state={grade:null,interest:{},ability:{},att:null,stage:{}}; clearShareParam(); renderList(); show('start'); }
+function resetAll(){
+  localStorage.removeItem(KEY);
+  state={grade:null,interest:{},ability:{},att:null,stage:{}};
+  // renderList 只重建三段题列表，不会重建静态 DOM 里的年级/检查题，需显式清掉它们的选中态
+  document.querySelectorAll('input[name=grade],input[name=att]').forEach(x=>{ x.checked=false; });
+  document.querySelectorAll('#start .opts label,#attention-q label').forEach(l=>l.classList.remove('on'));
+  clearShareParam();
+  save();
+  renderList();
+  show('start');
+}
 
 /* ===================== 计分 ===================== */
 function scoreByType(answers, types){
   // answers: {idx: optionIndex}; types: {idx: typeKey}
   // 返回各类型 {sum, answered, ratio, band, insufficient}
   const map={};
-  Object.values(types).forEach(t=>{ if(!map[t]) map[t]={sum:0,answered:0}; });
+  Object.values(types).forEach(t=>{ if(!map[t]) map[t]={sum:0,answered:0,total:0}; });
   Object.keys(answers).forEach(k=>{
     const j=answers[k]; if(j===null||j===undefined) return;
     const sc=OPT5_SCORE[j];
     if(sc===null||sc===undefined) return; // “没试过”不计分也不计作答
     const t=types[k]; if(!t) return;
-    map[t].sum+=sc; map[t].answered++;
+    map[t].sum+=sc; map[t].answered++; map[t].total++;
   });
   const out={};
   Object.keys(map).forEach(t=>{
     const m=map[t];
     const ratio=m.answered? m.sum/(m.answered*4):0;
     const band= ratio>=0.75?'高': ratio>=0.4?'中':'低';
-    out[t]={sum:m.sum, answered:m.answered, ratio, band, insufficient:m.answered<3};
+    // insufficient：作答数少于该类型题数的一半才判“信号偏弱”
+    // 兴趣类每型 5 题→需≥3 题；能力类每型 1 题→需≥1 题（避免恒为 true）
+    const need=Math.max(1, Math.ceil(m.total/2));
+    out[t]={sum:m.sum, answered:m.answered, ratio, band, insufficient:m.answered<need};
   });
   return out;
 }
@@ -373,11 +386,19 @@ function calcResult(){
   let hx='<h2>兴趣 × 能力 交叉看</h2>';
   top3.forEach(t=>{
     const rel=TYPE_ABILITY[t];
-    const hit=rel.filter(r=>{ const k=abKeys.find(x=>x===r); return k && A[r].ratio>=0.6; });
-    const low=rel.filter(r=>{ const k=abKeys.find(x=>x===r); return k && A[r].ratio<0.4; });
-    if(hit.length){ hx+=`<p style="margin:6px 0;">· <strong>${TYPE_NAME[t]}</strong>：相关能力（${hit.join('、')}）也较强，兴趣与能力相互印证，信号更可信。</p>`; }
-    else if(low.length){ hx+=`<p style="margin:6px 0;">· <strong>${TYPE_NAME[t]}</strong>：相关能力（${low.join('、')}）自评偏弱，属于"喜欢但还需练"，建议先低成本试水，别一上来报重课。</p>`; }
-    else { hx+=`<p style="margin:6px 0;">· <strong>${TYPE_NAME[t]}</strong>：相关能力处于中间水平，可边做边培养。</p>`; }
+    // 区分“未作答/选了没试过”（answered===0，ratio 也会是 0）与“答了但低分”
+    const hit=rel.filter(r=>A[r] && A[r].answered>0 && A[r].ratio>=0.6);
+    const low=rel.filter(r=>A[r] && A[r].answered>0 && A[r].ratio<0.4);
+    const na =rel.filter(r=>!A[r] || A[r].answered===0);
+    if(na.length===rel.length){
+      hx+=`<p style="margin:6px 0;">· <strong>${TYPE_NAME[t]}</strong>：相关能力（${rel.join('、')}）都还没作答或选了"没试过"，暂时无法对照"喜欢 vs 擅长"，建议先体验后再看。</p>`;
+    } else if(hit.length){
+      hx+=`<p style="margin:6px 0;">· <strong>${TYPE_NAME[t]}</strong>：相关能力（${hit.join('、')}）也较强，兴趣与能力相互印证，信号更可信。</p>`;
+    } else if(low.length){
+      hx+=`<p style="margin:6px 0;">· <strong>${TYPE_NAME[t]}</strong>：相关能力（${low.join('、')}）自评偏弱，属于"喜欢但还需练"，建议先低成本试水，别一上来报重课。</p>`;
+    } else {
+      hx+=`<p style="margin:6px 0;">· <strong>${TYPE_NAME[t]}</strong>：相关能力处于中间水平，可边做边培养。</p>`;
+    }
   });
   document.getElementById('cross-box').innerHTML=hx;
   // 发展阶段
@@ -488,10 +509,12 @@ function buildReportSVG(rep){
   T(PAD, y, '兴趣 × 能力 交叉看', 20, C.ink, 'bold'); y+=26;
   rep.top3.forEach(t=>{
     const rel=TYPE_ABILITY[t];
-    const hit=rel.filter(r=>rep.A[r] && rep.A[r].ratio>=0.6);
-    const low=rel.filter(r=>rep.A[r] && rep.A[r].ratio<0.4);
+    const hit=rel.filter(r=>rep.A[r] && rep.A[r].answered>0 && rep.A[r].ratio>=0.6);
+    const low=rel.filter(r=>rep.A[r] && rep.A[r].answered>0 && rep.A[r].ratio<0.4);
+    const na =rel.filter(r=>!rep.A[r] || rep.A[r].answered===0);
     let m;
-    if(hit.length) m=`${TYPE_NAME[t]}：相关能力（${hit.join('、')}）也较强，兴趣与能力相互印证，信号更可信。`;
+    if(na.length===rel.length) m=`${TYPE_NAME[t]}：相关能力（${rel.join('、')}）都还没作答或选了"没试过"，暂时无法对照，建议先体验后再看。`;
+    else if(hit.length) m=`${TYPE_NAME[t]}：相关能力（${hit.join('、')}）也较强，兴趣与能力相互印证，信号更可信。`;
     else if(low.length) m=`${TYPE_NAME[t]}：相关能力（${low.join('、')}）自评偏弱，属于"喜欢但还需练"，建议先低成本试水。`;
     else m=`${TYPE_NAME[t]}：相关能力处于中间水平，可边做边培养。`;
     y=wrap(PAD+16, y, '· '+m, 14, C.ink, CW-16, 20);

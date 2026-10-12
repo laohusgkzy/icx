@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>中学生兴趣探索测评</title>
+<style>
+  :root{
+    --blue:#3b82f6; --blue-soft:#eff6ff; --ink:#1f2937; --muted:#6b7280;
+    --line:#e5e7eb; --amber:#f59e0b; --green:#10b981; --red:#ef4444;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    background:#f7f8fa; color:var(--ink); line-height:1.6;
+  }
+  .wrap{max-width:760px; margin:0 auto; padding:16px;}
+  .card{background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px; margin-bottom:14px;}
+  h1{font-size:22px; margin:0 0 6px;}
+  h2{font-size:18px; margin:18px 0 10px;}
+  .sub{color:var(--muted); font-size:13px;}
+  .btn{display:block; width:100%; padding:13px; border:none; border-radius:10px;
+    background:var(--blue); color:#fff; font-size:16px; cursor:pointer; margin-top:12px;}
+  .btn.ghost{background:#fff; color:var(--blue); border:1px solid var(--blue);}
+  .btn.gray{background:#6b7280;}
+  .q{border:1px solid var(--line); border-radius:10px; padding:12px; margin:10px 0;}
+  .q .txt{font-size:15px; margin-bottom:8px;}
+  .opts{display:grid; grid-template-columns:repeat(5,1fr); gap:6px;}
+  .opts label{border:1px solid var(--line); border-radius:8px; padding:8px 4px; text-align:center;
+    font-size:13px; cursor:pointer; background:#fff;}
+  .opts input{display:none;}
+  .opts label.on{background:var(--blue); color:#fff; border-color:var(--blue);}
+  .tag{display:inline-block; font-size:12px; padding:2px 8px; border-radius:999px; background:var(--blue-soft); color:var(--blue); margin-right:6px;}
+  .pill{display:inline-block; font-size:12px; padding:3px 10px; border-radius:999px; margin:2px;}
+  .pill.high{background:#dcfce7; color:#166534;}
+  .pill.mid{background:#fef9c3; color:#854d0e;}
+  .pill.low{background:#fee2e2; color:#991b1b;}
+  .pill.warn{background:#ffedd5; color:#9a3412;}
+  .code{font-weight:700; letter-spacing:2px; font-size:20px; color:var(--blue);}
+  .row{display:flex; gap:10px; flex-wrap:wrap;}
+  .box{background:var(--blue-soft); border-radius:10px; padding:12px; margin:10px 0;}
+  .box.amber{background:#fffbeb; border:1px solid #fde68a;}
+  .axis-label{font-size:12px; fill:var(--muted);}
+  .hidden{display:none;}
+  .foot{font-size:12px; color:var(--muted); text-align:center; margin:20px 0;}
+  @media(max-width:560px){ .opts{grid-template-columns:repeat(2,1fr);} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 开始页 -->
+  <div id="start" class="card">
+    <h1>中学生兴趣探索测评</h1>
+    <p class="sub">适合初中生 / 高中生 · 离线可用</p>
+    <p style="font-size:14px;">本工具帮你发现"自己到底对哪类事情更有热情"，作为选社团、选科、了解专业方向的<strong>探索线索</strong>。它不是考试，没有标准答案，也没有"好/坏"之分。</p>
+    <p style="font-size:14px;">一共约 <strong>42 题</strong>，分三段：①兴趣（30题）②擅长（8题）③兴趣状态（4题）。每题都可选"没试过"，不会的别硬猜。进度自动保存，可随时回来。</p>
+    <div class="box amber">
+      <p style="margin:0;font-size:13px;">⚠️ 重要提示：本测评仅为兴趣探索参考，仅用于辅助中学生专业定位。未成年人请在家长/老师陪伴下使用，结果请结合成绩、真实体验和长辈建议一起看。</p>
+    </div>
+    <div class="q">
+      <div class="txt">你现在是？（用于让建议更贴合年龄）</div>
+      <div class="opts" style="grid-template-columns:repeat(3,1fr)">
+        <label><input type="radio" name="grade" value="初中" onchange="markOn(this)"> 初中生</label>
+        <label><input type="radio" name="grade" value="高中" onchange="markOn(this)"> 高中生</label>
+        <label><input type="radio" name="grade" value="其他" onchange="markOn(this)"> 其他</label>
+      </div>
+    </div>
+    <button class="btn" onclick="startTest()">开始测评</button>
+    <button class="btn ghost" onclick="resetAll()">清空重来</button>
+  </div>
+
+  <!-- 兴趣模块 -->
+  <div id="m-interest" class="card hidden">
+    <h2>第一段 · 你愿不愿意做这件事？</h2>
+    <p class="sub">只看"这件事本身你喜不喜欢"，别想好不好就业、体不体面。每题 5 选 1，没做过的选"没试过"。</p>
+    <div id="interest-list"></div>
+    <button class="btn" onclick="goAbility()">下一段：我擅长什么</button>
+  </div>
+
+  <!-- 能力模块 -->
+  <div id="m-ability" class="card hidden">
+    <h2>第二段 · 这件事你做起来是否轻松？</h2>
+    <p class="sub">这里问"擅长/得心应手"，和上面"喜不喜欢"是两回事。有人很喜欢画画但手生，也有人天生坐得住——都正常。</p>
+    <div id="ability-list"></div>
+    <div class="q" id="attention-q">
+      <div class="txt">📌 检查题：这道题请直接选「一般」就好（看看有没有认真读题）。</div>
+      <div class="opts">
+        <label><input type="radio" name="att" value="0" onchange="markOn(this)"> 很轻松</label>
+        <label><input type="radio" name="att" value="1" onchange="markOn(this)"> 比较轻松</label>
+        <label><input type="radio" name="att" value="2" onchange="markOn(this)"> 一般</label>
+        <label><input type="radio" name="att" value="3" onchange="markOn(this)"> 不太行</label>
+        <label><input type="radio" name="att" value="4" onchange="markOn(this)"> 没试过</label>
+      </div>
+    </div>
+    <button class="btn ghost" onclick="goInterest()">返回上一段</button>
+    <button class="btn" onclick="goStage()">下一段：我的兴趣状态</button>
+  </div>
+
+  <!-- 状态模块 -->
+  <div id="m-stage" class="card hidden">
+    <h2>第三段 · 我的兴趣现在处于什么状态？</h2>
+    <p class="sub">帮你判断：是该"多尝试几种"，还是可以"往深了走"。</p>
+    <div id="stage-list"></div>
+    <button class="btn ghost" onclick="goAbility()">返回上一段</button>
+    <button class="btn" onclick="calcResult()">查看我的结果</button>
+  </div>
+
+  <!-- 结果页 -->
+  <div id="result" class="card hidden">
+    <h1 style="text-align:center;">你的兴趣探索结果</h1>
+    <div id="radar-box" style="text-align:center;"></div>
+    <div id="code-box" class="box" style="text-align:center;"></div>
+    <div id="interest-top"></div>
+    <div id="ability-top" class="box"></div>
+    <div id="cross-box" class="box amber"></div>
+    <div id="stage-box" class="box"></div>
+    <div id="clue-box"></div>
+    <div class="box amber">
+      <p style="margin:0;font-size:13px;">⚠️ 再提醒一次：以上是<strong>探索线索</strong>，不是定论。真正的兴趣要在"做"里验证。建议挑 1–2 个方向，先花 2–4 周低成本试一试（见上面的"可以试试"），再回头看自己是不是真的还想做。</p>
+    </div>
+    <button class="btn" onclick="saveAsImage()">保存结果为图片（可存到相册）</button>
+    <button class="btn ghost" onclick="window.print()">导出 / 打印报告</button>
+    <button class="btn gray" onclick="resetAll()">重新测评</button>
+    <div id="img-preview" class="hidden" style="margin-top:12px;"></div>
+  </div>
+
+  <div class="foot">兴趣探索测评 · 基于 Holland RIASEC 与 Gardner 多元智能框架设计</div>
+</div>
+
+<script>
+/* ===================== 题库 ===================== */
+// 兴趣：R/I/A/S/E/C 各 5 题（贴近中学生生活、维度尽量纯净）
+const INTEREST = [
+  // R 现实型
+  {t:'R', q:'拼装模型、乐高、机械小装置'},
+  {t:'R', q:'用工具做木工、陶艺、手工 DIY'},
+  {t:'R', q:'拆开旧电器/玩具，看看里面怎么运作'},
+  {t:'R', q:'照着图纸搭东西、做实物'},
+  {t:'R', q:'修理或改装小物件'},
+  // I 研究型
+  {t:'I', q:'做科学小实验，观察并记录现象'},
+  {t:'I', q:'钻研数学或逻辑难题'},
+  {t:'I', q:'查资料，验证自己脑子里冒出的疑问'},
+  {t:'I', q:'观察动植物，记录它们的变化'},
+  {t:'I', q:'弄明白一件事"到底为什么"会这样'},
+  // A 艺术型
+  {t:'A', q:'画画、涂鸦、随手画点东西'},
+  {t:'A', q:'拍照片或短视频，琢磨构图和光影'},
+  {t:'A', q:'写故事、日记或随便写点什么'},
+  {t:'A', q:'设计海报、做点视觉创意'},
+  {t:'A', q:'听歌、玩乐器或自己哼旋律'},
+  // S 社会型
+  {t:'S', q:'给同学讲题，帮别人弄懂'},
+  {t:'S', q:'参加志愿或公益活动'},
+  {t:'S', q:'听朋友倒苦水，安慰、开导别人'},
+  {t:'S', q:'辅导低年级同学功课'},
+  {t:'S', q:'组织学习小组，大家一起进步'},
+  // E 企业型
+  {t:'E', q:'策划班会或活动，统筹安排流程'},
+  {t:'E', q:'在讨论里表达观点、说服别人'},
+  {t:'E', q:'带小组完成任务、给大家分活儿'},
+  {t:'E', q:'有了好点子，动员大家一起干'},
+  {t:'E', q:'负责一个项目，带着大家把它做成'},
+  // C 常规型
+  {t:'C', q:'整理笔记、把资料归类放好'},
+  {t:'C', q:'做表格、统计汇总数据'},
+  {t:'C', q:'按步骤一步一步把任务做完'},
+  {t:'C', q:'列清单、规划每天要做什么'},
+  {t:'C', q:'校对文字、找出里面的错漏'}
+];
+const TYPE_NAME = {R:'现实型', I:'研究型', A:'艺术型', S:'社会型', E:'企业型', C:'常规型'};
+const TYPE_DESC = {
+  R:'喜欢动手实操、和实物/机械打交道。可试：航模机器人社团、手工DIY、拆装研究。',
+  I:'喜欢思考、实验、弄清原理。可试：科学实验社、数学/信息竞赛、自然观察笔记。',
+  A:'喜欢创意表达与审美。可试：美术/摄影社、校园短视频、文学社、班级海报。',
+  S:'喜欢助人、沟通、教导。可试：志愿者协会、朋辈辅导、心理社、服务岗。',
+  E:'喜欢组织、说服、带队。可试：学生会/社团、辩论社、模拟创业、活动策划。',
+  C:'喜欢秩序、数据、规范。可试：编辑/档案部、数据整理、计划打卡、流程类工作。'
+};
+// 多元智能能力自评（各 1 题，标注"粗略自评"）
+const ABILITY = [
+  {k:'语言',     q:'讲故事、写作、把想法说清楚，做起来轻松'},
+  {k:'逻辑数学', q:'算题、找规律、逻辑推理，做起来轻松'},
+  {k:'空间',     q:'看图纸、想象立体形状、构图，做起来轻松'},
+  {k:'音乐',     q:'听旋律、玩乐器、哼歌，做起来轻松'},
+  {k:'身体动觉', q:'体育运动、手工操作、动手干活，做起来轻松'},
+  {k:'人际',     q:'和人打交道、带动气氛、化解矛盾，做起来轻松'},
+  {k:'内省',     q:'了解自己情绪、管好自己的状态，做起来轻松'},
+  {k:'自然观察', q:'认植物动物、观察自然、分辨细节，做起来轻松'}
+];
+// 兴趣发展阶段 / 心流
+const STAGE = [
+  {q:'做喜欢的事时，会不会常常忘了时间？', opts:['经常','有时','很少','从不'], sc:[3,2,1,0]},
+  {q:'有没有坚持过一项爱好超过半年？',     opts:['超过1年','半年到1年','试过但放弃了','几乎没有'], sc:[3,2,1,0]},
+  {q:'课余时间，你会自己主动练（不用家长催）吗？', opts:['经常','有时','很少','从不'], sc:[3,2,1,0]},
+  {q:'这个兴趣，主要是你自己想弄，还是别人说"好"？', opts:['完全自己想','多半自己想','多半别人影响','全是别人要求'], sc:[3,2,1,0]}
+];
+// 兴趣类型 ↔ 相关智能（用于交叉印证）
+const TYPE_ABILITY = {
+  R:['身体动觉','空间'], I:['逻辑数学','自然观察'], A:['空间','音乐'],
+  S:['人际','内省'], E:['人际','语言'], C:['逻辑数学','语言']
+};
+
+/* ===================== 状态 ===================== */
+const KEY='interest_explorer_v1';
+let state = load() || {grade:null, interest:{}, ability:{}, att:null, stage:{}};
+function load(){ try{return JSON.parse(localStorage.getItem(KEY));}catch(e){return null;} }
+function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
+let lastResult=null;
+
+/* ===================== 渲染题项 ===================== */
+const OPT5 = ['非常喜欢','喜欢','一般','不喜欢','没试过'];
+const OPT5_SCORE = [4,3,2,1,null];
+const OPTA = ['很轻松','比较轻松','一般','不太行','没试过'];
+
+function renderList(){
+  const il=document.getElementById('interest-list'); il.innerHTML='';
+  INTEREST.forEach((it,i)=>{
+    const prev=state.interest[i];
+    let opts='';
+    OPT5.forEach((o,j)=>{
+      const on = prev===j?'on':'';
+      opts+=`<label class="${on}"><input type="radio" name="i${i}" value="${j}" onchange="pickInterest(${i},${j},this)"> ${o}</label>`;
+    });
+    il.innerHTML+=`<div class="q"><div class="txt"><span class="tag">${TYPE_NAME[it.t]}</span>${i+1}. ${it.q}</div><div class="opts">${opts}</div></div>`;
+  });
+  const al=document.getElementById('ability-list'); al.innerHTML='';
+  ABILITY.forEach((it,i)=>{
+    const prev=state.ability[i];
+    let opts='';
+    OPTA.forEach((o,j)=>{
+      const on = prev===j?'on':'';
+      opts+=`<label class="${on}"><input type="radio" name="a${i}" value="${j}" onchange="pickAbility(${i},${j},this)"> ${o}</label>`;
+    });
+    al.innerHTML+=`<div class="q"><div class="txt">${i+1}. ${it.q}</div><div class="opts">${opts}</div></div>`;
+  });
+  const sl=document.getElementById('stage-list'); sl.innerHTML='';
+  STAGE.forEach((it,i)=>{
+    const prev=state.stage[i];
+    let opts='';
+    it.opts.forEach((o,j)=>{
+      const on = prev===j?'on':'';
+      opts+=`<label class="${on}"><input type="radio" name="s${i}" value="${j}" onchange="pickStage(${i},${j},this)"> ${o}</label>`;
+    });
+    sl.innerHTML+=`<div class="q"><div class="txt">${i+1}. ${it.q}</div><div class="opts">${opts}</div></div>`;
+  });
+  // 年级回填
+  if(state.grade){ const g=document.querySelector(`input[name=grade][value="${state.grade}"]`); if(g)g.checked=true; }
+  // 认真度回填
+  if(state.att!==null && state.att!==undefined){ const a=document.querySelector(`input[name=att][value="${state.att}"]`); if(a)a.checked=true; }
+}
+function markOn(el){
+  const g=el.closest('.opts');
+  if(g) g.querySelectorAll('label').forEach(l=>l.classList.remove('on'));
+  const lab=el.closest('label')||el;
+  lab.classList.add('on');
+}
+function pickInterest(i,j,el){ state.interest[i]=j; save(); markOn(el); }
+function pickAbility(i,j,el){ state.ability[i]=j; save(); markOn(el); }
+function pickStage(i,j,el){ state.stage[i]=j; save(); markOn(el); }
+
+/* ===================== 流程 ===================== */
+function startTest(){
+  const g=document.querySelector('input[name=grade]:checked');
+  state.grade = g?g.value:null; save();
+  document.getElementById('start').classList.add('hidden');
+  document.getElementById('m-interest').classList.remove('hidden');
+  renderList();
+  window.scrollTo(0,0);
+}
+function goInterest(){ show('m-interest'); }
+function goAbility(){ show('m-ability'); }
+function goStage(){ show('m-stage'); }
+function show(id){
+  ['start','m-interest','m-ability','m-stage','result'].forEach(x=>document.getElementById(x).classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+  window.scrollTo(0,0);
+}
+function resetAll(){ localStorage.removeItem(KEY); state={grade:null,interest:{},ability:{},att:null,stage:{}}; renderList(); show('start'); }
+
+/* ===================== 计分 ===================== */
+function scoreByType(answers, types){
+  // answers: {idx: optionIndex or null}; 返回各类型 {sum, answered, ratio, band, insufficient}
+  const map={}; types.forEach(t=>map[t]={sum:0,answered:0});
+  Object.keys(answers).forEach(k=>{
+    const j=answers[k]; if(j===null||j===undefined) return;
+    const t=types[k]; if(!t) return;
+    map[t].sum+=OPT5_SCORE[j]; map[t].answered++;
+  });
+  const out={};
+  Object.keys(map).forEach(t=>{
+    const m=map[t];
+    const ratio=m.answered? m.sum/(m.answered*4):0;
+    const band= ratio>=0.75?'高': ratio>=0.4?'中':'低';
+    out[t]={sum:m.sum, answered:m.answered, ratio, band, insufficient:m.answered<3};
+  });
+  return out;
+}
+
+function calcResult(){
+  // 兴趣
+  const intTypes={}; INTEREST.forEach((it,i)=>intTypes[i]=it.t);
+  const I=scoreByType(state.interest, intTypes);
+  // 能力
+  const abTypes={}; ABILITY.forEach((it,i)=>abTypes[i]=it.k);
+  const A=scoreByType(state.ability, abTypes);
+  // 认真度
+  const attentionOk = state.att===2;
+  // 兴趣排序
+  const order=['R','I','A','S','E','C'];
+  const sorted=order.slice().sort((a,b)=> (I[b].ratio-I[a].ratio) || (I[b].sum-I[a].sum));
+  const top3=sorted.slice(0,3);
+  const code=top3.join('');
+  // 分化度
+  const ratios=order.map(t=>I[t].ratio);
+  const diff=Math.max(...ratios)-Math.min(...ratios);
+  const diffLabel= diff>=0.5?'兴趣较集中': diff>=0.2?'兴趣分化中等':'兴趣尚未明显分化';
+  // 一致性（Holland 六边形 R-I-A-S-E-C）
+  const pos={R:0,I:1,A:2,S:3,E:4,C:5};
+  const a=pos[top3[0]], b=pos[top3[1]];
+  let d=Math.abs(a-b); if(d>3)d=6-d;
+  let consLabel = d===1?'两型相邻，方向协调': d===3?'两型相对，存在内在张力':'两型中性，可兼顾';
+  // 发展阶段
+  let stageSum=0, stageAns=0;
+  STAGE.forEach((it,i)=>{ if(state.stage[i]!==undefined&&state.stage[i]!==null){ stageSum+=it.sc[state.stage[i]]; stageAns++; }});
+  const stageRatio= stageAns? stageSum/(stageAns*3):0;
+  let stageName, stageAdv;
+  if(stageRatio>=0.75){ stageName='成熟的个体兴趣'; stageAdv='已经比较稳定，可以往深了走：找系统资源、拜师、参加竞赛或项目。'; }
+  else if(stageRatio>=0.5){ stageName='萌芽的个体兴趣'; stageAdv='开始有自己的方向，建议小步深入：报个社团/短期班验证一下。'; }
+  else if(stageRatio>=0.25){ stageName='维持的情境兴趣'; stageAdv='现在更多是"觉得不错"，建议多尝试几种，先广泛体验再收敛。'; }
+  else { stageName='刚被触发的兴趣'; stageAdv='可能只是一时好奇，建议低成本多试，别急着投入大量时间和钱。'; }
+
+  // 能力 TOP3
+  const abKeys=Object.keys(A);
+  const abSorted=abKeys.slice().sort((a,b)=>(A[b].ratio-A[a].ratio)||(A[b].sum-A[a].sum));
+  const abTop3=abSorted.slice(0,3);
+
+  /* ---------- 渲染 ---------- */
+  // 雷达图
+  document.getElementById('radar-box').innerHTML = radar(order.map(t=>I[t].ratio), order.map(t=>TYPE_NAME[t]));
+  // 三字母码
+  document.getElementById('code-box').innerHTML =
+    `<div class="sub">你的兴趣三字母码</div><div class="code">${code}</div>`+
+    `<div class="row" style="justify-content:center;margin-top:8px;">`+
+    `<span class="pill ${diff>=0.5?'high':diff>=0.2?'mid':'low'}">${diffLabel}</span>`+
+    `<span class="pill ${d===1?'high':d===3?'warn':'mid'}">${consLabel}</span>`+
+    (attentionOk?'':'<span class="pill warn">作答认真度偏低，结果仅供参考</span>')+
+    `</div>`;
+  // 兴趣 TOP3
+  let ht='<h2>你最突出的兴趣方向</h2>';
+  top3.forEach((t,i)=>{
+    const cls=I[t].band==='高'?'high':I[t].band==='中'?'mid':'low';
+    ht+=`<div class="box"><p style="margin:0 0 4px;"><strong>${i+1}. ${TYPE_NAME[t]}</strong> `+
+         `<span class="pill ${cls}">${I[t].band} (${I[t].sum}分/${I[t].answered*4}满分)</span></p>`+
+         `<p style="margin:0;font-size:14px;">${TYPE_DESC[t]}</p>`+
+         (I[t].insufficient?'<p class="sub" style="margin:4px 0 0;color:#b45309;">该题做过太少（选了多个"没试过"），信号偏弱。</p>':'')+
+         `</div>`;
+  });
+  document.getElementById('interest-top').innerHTML=ht;
+  // 能力 TOP3
+  let ha='<h2>你自评最得心应手的能力</h2><p class="sub">和"喜不喜欢"分开看：喜欢≠擅长，擅长也≠必须喜欢。</p>';
+  abTop3.forEach((k,i)=>{
+    const cls=A[k].band==='高'?'high':A[k].band==='中'?'mid':'low';
+    ha+=`<span class="pill ${cls}">${k} · ${A[k].band}</span> `;
+  });
+  document.getElementById('ability-top').innerHTML=ha;
+  // 交叉印证
+  let hx='<h2>兴趣 × 能力 交叉看</h2>';
+  top3.forEach(t=>{
+    const rel=TYPE_ABILITY[t];
+    const hit=rel.filter(r=>{ const k=abKeys.find(x=>x===r); return k && A[r].ratio>=0.6; });
+    const low=rel.filter(r=>{ const k=abKeys.find(x=>x===r); return k && A[r].ratio<0.4; });
+    if(hit.length){ hx+=`<p style="margin:6px 0;">· <strong>${TYPE_NAME[t]}</strong>：相关能力（${hit.join('、')}）也较强，兴趣与能力相互印证，信号更可信。</p>`; }
+    else if(low.length){ hx+=`<p style="margin:6px 0;">· <strong>${TYPE_NAME[t]}</strong>：相关能力（${low.join('、')}）自评偏弱，属于"喜欢但还需练"，建议先低成本试水，别一上来报重课。</p>`; }
+    else { hx+=`<p style="margin:6px 0;">· <strong>${TYPE_NAME[t]}</strong>：相关能力处于中间水平，可边做边培养。</p>`; }
+  });
+  document.getElementById('cross-box').innerHTML=hx;
+  // 发展阶段
+  document.getElementById('stage-box').innerHTML=
+    `<h2>你的兴趣现在处于</h2><p style="margin:0;"><strong>${stageName}</strong></p>`+
+    `<p style="margin:6px 0 0;font-size:14px;">${stageAdv}</p>`;
+  // 探索线索
+  let hc='<h2>可以试试（低成本验证）</h2><p class="sub">挑 1–2 个方向，花 2–4 周做做看，比空想准得多。</p>';
+  top3.forEach(t=>{
+    hc+=`<div class="box"><p style="margin:0 0 4px;"><strong>${TYPE_NAME[t]}</strong> 可以这样开始：</p>`+
+        `<p style="margin:0;font-size:14px;">${clueFor(t)}</p></div>`;
+  });
+  document.getElementById('clue-box').innerHTML=hc;
+
+  lastResult={code,top3,I,stageName,order};
+  show('result');
+  save();
+}
+
+function clueFor(t){
+  const c={
+    R:['参加航模/机器人社团或手工 DIY 班','拆一个旧闹钟研究结构再装回去','周末去本地的工厂开放日/科技馆动手区'],
+    I:['加入科学实验社，做个小课题','刷一刷数学/信息类趣味题','养一盆植物或观察一种昆虫，记两周变化日志'],
+    A:['加入美术/摄影社，每周交一张作品','用手机剪一个 1 分钟短视频','给班级活动设计一张海报'],
+    S:['报名校园志愿者或朋辈辅导','当一次"小老师"给同学讲题','加入心理社或组织一次班级互助'],
+    E:['竞选一次课代表/社团干事','组队参加辩论或模拟创业活动','自己策划并落地一次小型班级活动'],
+    C:['帮班级做一份活动统计表','用清单+打卡管理自己一周任务','参与校刊/编辑部的校对工作']
+  };
+  return (c[t]||[]).map(x=>'· '+x).join('<br>');
+}
+
+/* ===================== 离线 SVG 雷达图 ===================== */
+function radar(values, labels){
+  const size=300, cx=size/2, cy=size/2, R=110;
+  const n=values.length;
+  const ang=i=>(-90 + i*360/n)*Math.PI/180;
+  const pt=(i,r)=>[cx+r*Math.cos(ang(i)), cy+r*Math.sin(ang(i))];
+  let g='';
+  // 网格环
+  [0.25,0.5,0.75,1].forEach(ring=>{
+    let pts='';
+    for(let i=0;i<n;i++){ const [x,y]=pt(i,R*ring); pts+=`${x.toFixed(1)},${y.toFixed(1)} `; }
+    g+=`<polygon points="${pts}" fill="none" stroke="#e5e7eb" stroke-width="1"/>`;
+  });
+  // 轴线 + 标签
+  for(let i=0;i<n;i++){
+    const [x,y]=pt(i,R); g+=`<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#e5e7eb"/>`;
+    const [lx,ly]=pt(i,R+20);
+    const anchor = Math.abs(lx-cx)<5?'middle':(lx>cx?'start':'end');
+    g+=`<text x="${lx.toFixed(1)}" y="${(ly+4).toFixed(1)}" text-anchor="${anchor}" class="axis-label">${labels[i]}</text>`;
+  }
+  // 数据多边形
+  let dpts='';
+  for(let i=0;i<n;i++){ const [x,y]=pt(i,R*Math.max(0.02,values[i])); dpts+=`${x.toFixed(1)},${y.toFixed(1)} `; }
+  g+=`<polygon points="${dpts}" fill="rgba(59,130,246,0.25)" stroke="#3b82f6" stroke-width="2"/>`;
+  for(let i=0;i<n;i++){ const [x,y]=pt(i,R*Math.max(0.02,values[i])); g+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="#3b82f6"/>`; }
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${g}</svg>`;
+}
+
+/* ===================== 结果存为图片（本地相册） ===================== */
+function svgToPng(svgStr,w,h){
+  const blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const img=new Image();
+  img.onload=()=>{
+    const c=document.createElement('canvas'); c.width=w; c.height=h;
+    const ctx=c.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h);
+    ctx.drawImage(img,0,0,w,h);
+    const png=c.toDataURL('image/png');
+    URL.revokeObjectURL(url);
+    const box=document.getElementById('img-preview');
+    box.classList.remove('hidden');
+    box.innerHTML=`<img src="${png}" style="width:100%;border:1px solid #e5e7eb;border-radius:10px;display:block;">`+
+      `<p class="sub" style="margin:8px 0 4px;">手机端：长按上方图片即可保存到相册。电脑端点下面按钮下载。</p>`+
+      `<a class="btn" download="兴趣探索结果.png" href="${png}">下载图片</a>`;
+    box.scrollIntoView({behavior:'smooth'});
+  };
+  img.onerror=()=>{ URL.revokeObjectURL(url); alert('图片生成失败，请改用"导出 / 打印报告"。'); };
+  img.src=url;
+}
+function saveAsImage(){
+  if(!lastResult){ alert('请先完成测评并查看结果。'); return; }
+  const {code,top3,I,stageName,order}=lastResult;
+  const W=750,H=1180;
+  const radarSVG=radar(order.map(t=>I[t].ratio), order.map(t=>TYPE_NAME[t]));
+  const radarEmbed=radarSVG.replace('<svg ','<svg x="225" y="120" ');
+  let lines='';
+  top3.forEach((t,i)=>{
+    lines+=`<text x="40" y="${520+i*72}" font-size="26" fill="#1f2937"><tspan font-weight="bold">${i+1}. ${TYPE_NAME[t]}</tspan> <tspan fill="#3b82f6" font-size="22">${I[t].band}</tspan></text>`;
+  });
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`+
+    `<rect width="${W}" height="${H}" fill="#ffffff"/>`+
+    `<text x="40" y="70" font-size="34" font-weight="bold" fill="#1f2937">兴趣探索结果</text>`+
+    `<text x="40" y="104" font-size="18" fill="#6b7280">兴趣三字母码</text>`+
+    `<text x="40" y="156" font-size="50" font-weight="bold" fill="#3b82f6" letter-spacing="6">${code}</text>`+
+    radarEmbed+
+    lines+
+    `<text x="40" y="${520+top3.length*72+24}" font-size="22" fill="#374151">当前兴趣阶段：${stageName}</text>`+
+    `<text x="40" y="${H-40}" font-size="16" fill="#9ca3af">本结果仅作兴趣探索参考，非专业测验</text>`+
+    `</svg>`;
+  svgToPng(svg,W,H);
+}
+
+/* 初始化 */
+renderList();
+</script>
+</body>
+</html>

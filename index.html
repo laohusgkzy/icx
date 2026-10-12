@@ -315,7 +315,7 @@ function scoreByType(answers, types){
   return out;
 }
 
-function calcResult(){
+function calcResult(persist){
   // 兴趣
   const intTypes={}; INTEREST.forEach((it,i)=>intTypes[i]=it.t);
   const I=scoreByType(state.interest, intTypes);
@@ -415,7 +415,7 @@ function calcResult(){
 
   lastResult={code,top3,I,A,abTop3,abKeys,diffLabel,consLabel,attentionOk,stageName,stageAdv,order};
   show('result');
-  save();
+  if(persist!==false) save();
   document.title='兴趣探索结果 · '+code;
   try{ const base=location.origin+location.pathname; history.replaceState(null,'', base+'?r='+encState()); }catch(e){}
 }
@@ -434,7 +434,7 @@ function clueFor(t){
 
 /* ===================== 离线 SVG 雷达图 ===================== */
 function radar(values, labels){
-  const size=300, cx=size/2, cy=size/2, R=110;
+  const size=300, cx=size/2, cy=size/2, R=95;
   const n=values.length;
   const ang=i=>(-90 + i*360/n)*Math.PI/180;
   const pt=(i,r)=>[cx+r*Math.cos(ang(i)), cy+r*Math.sin(ang(i))];
@@ -448,9 +448,9 @@ function radar(values, labels){
   // 轴线 + 标签
   for(let i=0;i<n;i++){
     const [x,y]=pt(i,R); g+=`<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#e5e7eb"/>`;
-    const [lx,ly]=pt(i,R+20);
+    const [lx,ly]=pt(i,R+22);
     const anchor = Math.abs(lx-cx)<5?'middle':(lx>cx?'start':'end');
-    g+=`<text x="${lx.toFixed(1)}" y="${(ly+4).toFixed(1)}" text-anchor="${anchor}" class="axis-label">${labels[i]}</text>`;
+    g+=`<text x="${lx.toFixed(1)}" y="${(ly+4).toFixed(1)}" text-anchor="${anchor}" font-size="12" fill="#6b7280">${labels[i]}</text>`;
   }
   // 数据多边形
   let dpts='';
@@ -465,7 +465,7 @@ const _esc = s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/
 let _mctx=null;
 function _meas(font){ if(!_mctx){_mctx=document.createElement('canvas').getContext('2d');} _mctx.font=font; return _mctx; }
 function _wrap(text,font,maxW){
-  const ctx=_meas(font); const lines=[]; let line='';
+  const ctx=_meas(font||'normal 14px sans-serif'); const lines=[]; let line='';
   for(const ch of String(text)){
     const t=line+ch;
     if(ctx.measureText(t).width>maxW && line){ lines.push(line); line=ch; } else line=t;
@@ -479,11 +479,11 @@ function buildReportSVG(rep){
   const P={high:{b:'#dcfce7',f:'#166534'},mid:{b:'#fef9c3',f:'#854d0e'},low:{b:'#fee2e2',f:'#991b1b'},warn:{b:'#ffedd5',f:'#9a3412'}};
   let y=PAD+18, inner='';
   const T=(x,ty,str,size,color,weight,anchor)=>{ inner+=`<text x="${x}" y="${ty}" font-size="${size}" fill="${color}" ${weight?`font-weight="${weight}"`:''} ${anchor?`text-anchor="${anchor}"`:''}>${_esc(str)}</text>`; };
-  const wrap=(x,ty,str,size,color,maxW,lh,weight)=>{ const ls=_wrap(str,`${weight||''} ${size}px sans-serif`,maxW); ls.forEach((l,i)=>T(x,ty+i*lh, l, size, color, weight)); return ty+ls.length*lh; };
+  const wrap=(x,ty,str,size,color,maxW,lh,weight)=>{ const ls=_wrap(str,`${weight||'normal'} ${size}px sans-serif`,maxW); ls.forEach((l,i)=>T(x,ty+i*lh, l, size, color, weight)); return ty+ls.length*lh; };
   const pills=(x,ty,items,h)=>{ let cx=x; items.forEach(it=>{ const tw=_meas('bold 14px sans-serif').measureText(it.t).width; const w=tw+22; if(cx+w>PAD+CW){ cx=PAD; ty+=h+8; } const r=h/2; inner+=`<rect x="${cx}" y="${ty}" width="${w}" height="${h}" rx="${r}" ry="${r}" fill="${it.b}"/>`; T(cx+w/2, ty+h/2+5, it.t, 14, it.f, 'bold','middle'); cx+=w+8; }); return ty+h+8; };
-  T(PAD, y, '兴趣探索结果', 30, C.ink, 'bold'); y+=32;
-  T(PAD, y, '兴趣三字母码', 16, C.muted); y+=26;
-  T(PAD, y, rep.code, 50, C.blue, 'bold'); y+=56;
+  T(PAD, y, '兴趣探索结果', 30, C.ink, 'bold'); y+=36;
+  T(PAD, y, '兴趣三字母码', 16, C.muted); y+=44;
+  T(PAD, y, rep.code, 50, C.blue, 'bold'); y+=60;
   const ps=[]; const dcls=rep.diffLabel.includes('集中')?'high':rep.diffLabel.includes('中等')?'mid':'low';
   ps.push({t:rep.diffLabel, ...P[dcls]});
   const ccls=rep.consLabel.includes('协调')?'high':rep.consLabel.includes('张力')?'warn':'mid';
@@ -503,7 +503,7 @@ function buildReportSVG(rep){
     if(it.insufficient){ y=wrap(PAD, y, '（该题做过太少，信号偏弱）', 13, '#b45309', CW, 18); }
     y+=10;
   });
-  T(PAD, y, '你自评最得心应手的能力', 20, C.ink, 'bold'); y+=10;
+  T(PAD, y, '你自评最得心应手的能力', 20, C.ink, 'bold'); y+=16;
   const ap=rep.abTop3.map(k=>({t:`${k} · ${rep.A[k].band}`, ...(rep.A[k].band==='高'?P.high:rep.A[k].band==='中'?P.mid:P.low)}));
   y=pills(PAD, y, ap, 26); y+=8;
   T(PAD, y, '兴趣 × 能力 交叉看', 20, C.ink, 'bold'); y+=26;
@@ -523,7 +523,7 @@ function buildReportSVG(rep){
   T(PAD, y, '你的兴趣现在处于', 20, C.ink, 'bold'); y+=26;
   T(PAD, y, rep.stageName, 16, C.blue, 'bold'); y+=22;
   y=wrap(PAD, y, rep.stageAdv, 14, C.ink, CW, 20); y+=10;
-  T(PAD, y, '可以试试（低成本验证）', 20, C.ink, 'bold'); y+=10;
+  T(PAD, y, '可以试试（低成本验证）', 20, C.ink, 'bold'); y+=28;
   rep.top3.forEach(t=>{
     T(PAD, y, TYPE_NAME[t], 16, C.ink, 'bold'); y+=22;
     clueFor(t).split('<br>').forEach(l=>{ y=wrap(PAD+12, y, l, 14, C.ink, CW-12, 20); });
@@ -565,15 +565,24 @@ function b64dec(b64){ return new TextDecoder().decode(Uint8Array.from(atob(b64),
 function encState(){ let s=b64enc(JSON.stringify(state)); return s.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
 function decState(s){ s=s.replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4)s+='='; return JSON.parse(b64dec(s)); }
 function clearShareParam(){ try{ history.replaceState(null,'',location.pathname); }catch(e){} }
+function isComplete(st){
+  if(!st||typeof st!=='object') return false;
+  const ic=Object.values(st.interest||{}).filter(v=>v!==null&&v!==undefined).length;
+  const ac=Object.values(st.ability||{}).filter(v=>v!==null&&v!==undefined).length;
+  return ic>=INTEREST.length && ac>=ABILITY.length && st.att!==null&&st.att!==undefined;
+}
 function init(){
   const r=new URLSearchParams(location.search).get('r');
   if(r){
     try{
       const st=decState(r);
-      if(st && typeof st==='object'){ state=st; renderList(); calcResult(); return; }
+      if(st && typeof st==='object'){ state=st; renderList(); calcResult(false); return; } // 深链还原不落库，避免覆盖接收者自己的作答
     }catch(e){}
     clearShareParam();
   }
+  // 本机已完成过测评：再次打开（含裸链接）直接呈现结果页
+  const saved=load();
+  if(isComplete(saved)){ state=saved; renderList(); calcResult(true); return; }
   renderList();
 }
 init();

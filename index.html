@@ -70,9 +70,9 @@
     <div class="q">
       <div class="txt">你现在是？（用于让建议更贴合年龄）</div>
       <div class="opts" style="grid-template-columns:repeat(3,1fr)">
-        <label><input type="radio" name="grade" value="初中" onchange="markOn(this)"> 初中生</label>
-        <label><input type="radio" name="grade" value="高中" onchange="markOn(this)"> 高中生</label>
-        <label><input type="radio" name="grade" value="其他" onchange="markOn(this)"> 其他</label>
+        <label><input type="radio" name="grade" value="初中" onchange="pickGrade(this)"> 初中生</label>
+        <label><input type="radio" name="grade" value="高中" onchange="pickGrade(this)"> 高中生</label>
+        <label><input type="radio" name="grade" value="其他" onchange="pickGrade(this)"> 其他</label>
       </div>
     </div>
     <button class="btn" onclick="startTest()">开始测评</button>
@@ -118,6 +118,9 @@
 
   <!-- 结果页 -->
   <div id="result" class="card hidden">
+    <div id="view-banner" class="hidden box amber">
+      <p style="margin:0;font-size:14px;">👀 正在查看他人分享的测评结果，<strong>你的本地作答没有被改动</strong>。点下方"重新测评"可回到自己的进度。</p>
+    </div>
     <h1 style="text-align:center;">你的兴趣探索结果</h1>
     <div id="radar-box" style="text-align:center;"></div>
     <div id="code-box" class="box" style="text-align:center;"></div>
@@ -217,6 +220,7 @@ let state = load() || {grade:null, interest:{}, ability:{}, att:null, stage:{}};
 function load(){ try{return JSON.parse(localStorage.getItem(KEY));}catch(e){return null;} }
 function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
 let lastResult=null;
+let viewOnly=false;
 
 /* ===================== 渲染题项 ===================== */
 const OPT5 = ['非常喜欢','喜欢','一般','不喜欢','没试过'];
@@ -255,9 +259,9 @@ function renderList(){
     sl.innerHTML+=`<div class="q"><div class="txt">${i+1}. ${it.q}</div><div class="opts">${opts}</div></div>`;
   });
   // 年级回填
-  if(state.grade){ const g=document.querySelector(`input[name=grade][value="${state.grade}"]`); if(g)g.checked=true; }
+  if(state.grade){ const g=document.querySelector(`input[name=grade][value="${state.grade}"]`); if(g){ g.checked=true; const lab=g.closest('label'); if(lab) lab.classList.add('on'); } }
   // 认真度回填
-  if(state.att!==null && state.att!==undefined){ const a=document.querySelector(`input[name=att][value="${state.att}"]`); if(a)a.checked=true; }
+  if(state.att!==null && state.att!==undefined){ const a=document.querySelector(`input[name=att][value="${state.att}"]`); if(a){ a.checked=true; const lab=a.closest('label'); if(lab) lab.classList.add('on'); } }
 }
 function markOn(el){
   const g=el.closest('.opts');
@@ -269,6 +273,7 @@ function pickInterest(i,j,el){ state.interest[i]=j; save(); markOn(el); }
 function pickAbility(i,j,el){ state.ability[i]=j; save(); markOn(el); }
 function pickStage(i,j,el){ state.stage[i]=j; save(); markOn(el); }
 function pickAtt(el){ state.att=Number(el.value); save(); markOn(el); }
+function pickGrade(el){ state.grade=el.value; save(); markOn(el); }
 
 /* ===================== 流程 ===================== */
 function startTest(){
@@ -288,6 +293,17 @@ function show(id){
   window.scrollTo(0,0);
 }
 function resetAll(){
+  if(viewOnly){
+    // 仅退出"查看他人结果"模式，保留接收者自己的本地进度不被清除
+    viewOnly=false;
+    const banner=document.getElementById('view-banner');
+    if(banner) banner.classList.add('hidden');
+    clearShareParam();
+    const saved=load();
+    if(isComplete(saved)){ state=saved; renderList(); calcResult(true); }
+    else { state={grade:null,interest:{},ability:{},att:null,stage:{}}; renderList(); show('start'); }
+    return;
+  }
   localStorage.removeItem(KEY);
   state={grade:null,interest:{},ability:{},att:null,stage:{}};
   // renderList 只重建三段题列表，不会重建静态 DOM 里的年级/检查题，需显式清掉它们的选中态
@@ -304,13 +320,13 @@ function scoreByType(answers, types){
   // answers: {idx: optionIndex}; types: {idx: typeKey}
   // 返回各类型 {sum, answered, ratio, band, insufficient}
   const map={};
-  Object.values(types).forEach(t=>{ if(!map[t]) map[t]={sum:0,answered:0,total:0}; });
+  Object.values(types).forEach(t=>{ if(!map[t]) map[t]={sum:0,answered:0,total:0}; map[t].total++; });
   Object.keys(answers).forEach(k=>{
     const j=answers[k]; if(j===null||j===undefined) return;
     const sc=OPT5_SCORE[j];
     if(sc===null||sc===undefined) return; // “没试过”不计分也不计作答
     const t=types[k]; if(!t) return;
-    map[t].sum+=sc; map[t].answered++; map[t].total++;
+    map[t].sum+=sc; map[t].answered++;
   });
   const out={};
   Object.keys(map).forEach(t=>{
@@ -325,23 +341,26 @@ function scoreByType(answers, types){
   return out;
 }
 
-function calcResult(persist){
+function calcResult(persist, ext){
+  const st = ext || state;
   // 兴趣
   const intTypes={}; INTEREST.forEach((it,i)=>intTypes[i]=it.t);
-  const I=scoreByType(state.interest, intTypes);
+  const I=scoreByType(st.interest, intTypes);
   // 能力
   const abTypes={}; ABILITY.forEach((it,i)=>abTypes[i]=it.k);
-  const A=scoreByType(state.ability, abTypes);
+  const A=scoreByType(st.ability, abTypes);
   // 认真度
-  const attentionOk = state.att===2;
+  const attentionOk = st.att===2;
   // 兴趣排序
   const order=['R','I','A','S','E','C'];
-  const sorted=order.slice().sort((a,b)=> (I[b].ratio-I[a].ratio) || (I[b].sum-I[a].sum));
+  const sorted=order.slice().sort((a,b)=> (I[b].ratio-I[a].ratio) || (I[b].sum-I[a].sum) || (a<b?-1:1));
   const top3=sorted.slice(0,3);
   const code=top3.join('');
   // 分化度
-  const ratios=order.map(t=>I[t].ratio);
-  const diff=Math.max(...ratios)-Math.min(...ratios);
+  // 分化度：只对"确实测过(answered>0)"的类型计算，避免未测类型 ratio=0 把差值人为拉大
+  const tested=order.filter(t=>I[t].answered>0);
+  const diffVals=tested.map(t=>I[t].ratio);
+  const diff = diffVals.length? (Math.max(...diffVals)-Math.min(...diffVals)) : 0;
   const diffLabel= diff>=0.5?'兴趣较集中': diff>=0.2?'兴趣分化中等':'兴趣尚未明显分化';
   // 一致性（Holland 六边形 R-I-A-S-E-C）
   const pos={R:0,I:1,A:2,S:3,E:4,C:5};
@@ -350,7 +369,7 @@ function calcResult(persist){
   let consLabel = d===1?'两型相邻，方向协调': d===3?'两型相对，存在内在张力':'两型中性，可兼顾';
   // 发展阶段
   let stageSum=0, stageAns=0;
-  STAGE.forEach((it,i)=>{ if(state.stage[i]!==undefined&&state.stage[i]!==null){ stageSum+=it.sc[state.stage[i]]; stageAns++; }});
+  STAGE.forEach((it,i)=>{ if(st.stage[i]!==undefined&&st.stage[i]!==null){ stageSum+=it.sc[st.stage[i]]; stageAns++; }});
   const stageRatio= stageAns? stageSum/(stageAns*3):0;
   let stageName, stageAdv;
   if(stageRatio>=0.75){ stageName='成熟的个体兴趣'; stageAdv='已经比较稳定，可以往深了走：找系统资源、拜师、参加竞赛或项目。'; }
@@ -425,9 +444,11 @@ function calcResult(persist){
 
   lastResult={code,top3,I,A,abTop3,abKeys,diffLabel,consLabel,attentionOk,stageName,stageAdv,order};
   show('result');
-  if(persist!==false) save();
-  document.title='兴趣探索结果 · '+code;
-  try{ const base=location.origin+location.pathname; history.replaceState(null,'', base+'?r='+encState()); }catch(e){}
+  if(!ext){
+    if(persist!==false) save();
+    document.title='兴趣探索结果 · '+code;
+    try{ const base=location.origin+location.pathname; history.replaceState(null,'', base+'?r='+encState()); }catch(e){}
+  }
 }
 
 function clueFor(t){
@@ -570,7 +591,13 @@ function saveAsImage(){
 }
 
 /* ===================== 深链分享 + 初始化 ===================== */
-function b64enc(str){ return btoa(String.fromCharCode(...new TextEncoder().encode(str))); }
+function b64enc(str){
+  const bytes=new TextEncoder().encode(str);
+  let bin='';
+  const chunk=0x8000;
+  for(let i=0;i<bytes.length;i+=chunk){ bin+=String.fromCharCode.apply(null, bytes.subarray(i,i+chunk)); }
+  return btoa(bin);
+}
 function b64dec(b64){ return new TextDecoder().decode(Uint8Array.from(atob(b64), c=>c.charCodeAt(0))); }
 function encState(){ let s=b64enc(JSON.stringify(state)); return s.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
 function decState(s){ s=s.replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4)s+='='; return JSON.parse(b64dec(s)); }
@@ -586,7 +613,17 @@ function init(){
   if(r){
     try{
       const st=decState(r);
-      if(st && typeof st==='object'){ state=st; renderList(); calcResult(false); return; } // 深链还原不落库，避免覆盖接收者自己的作答
+      if(st && typeof st==='object'){
+        // 深链还原：只读渲染他人结果，绝不写入/覆盖接收者本地进度
+        viewOnly=true;
+        const saved=load();
+        state = saved || {grade:null, interest:{}, ability:{}, att:null, stage:{}};
+        const banner=document.getElementById('view-banner');
+        if(banner) banner.classList.remove('hidden');
+        renderList();
+        calcResult(false, st);
+        return;
+      }
     }catch(e){}
     clearShareParam();
   }

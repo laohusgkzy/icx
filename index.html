@@ -278,7 +278,8 @@ function pickGrade(el){ state.grade=el.value; save(); markOn(el); }
 /* ===================== 流程 ===================== */
 function startTest(){
   const g=document.querySelector('input[name=grade]:checked');
-  state.grade = g?g.value:null; save();
+  if(!g){ alert('请先选择你是「初中生 / 高中生 / 其他」，这能让建议更贴合你的年龄。'); return; }
+  state.grade = g.value; save();
   document.getElementById('start').classList.add('hidden');
   document.getElementById('m-interest').classList.remove('hidden');
   renderList();
@@ -286,7 +287,14 @@ function startTest(){
 }
 function goInterest(){ show('m-interest'); }
 function goAbility(){ show('m-ability'); }
-function goStage(){ show('m-stage'); }
+function goStage(){
+  if(state.att===null||state.att===undefined){
+    alert('请先作答第二段最后一道「检查题」——它用来确认你认真读了题，不作答无法进入下一步。');
+    show('m-ability');
+    return;
+  }
+  show('m-stage');
+}
 function show(id){
   ['start','m-interest','m-ability','m-stage','result'].forEach(x=>document.getElementById(x).classList.add('hidden'));
   document.getElementById(id).classList.remove('hidden');
@@ -351,22 +359,33 @@ function calcResult(persist, ext){
   const A=scoreByType(st.ability, abTypes);
   // 认真度
   const attentionOk = st.att===2;
+  const attNull = (st.att===null||st.att===undefined);
   // 兴趣排序
   const order=['R','I','A','S','E','C'];
-  const sorted=order.slice().sort((a,b)=> (I[b].ratio-I[a].ratio) || (I[b].sum-I[a].sum) || (a<b?-1:1));
+  // top3 只取"确实测过(answered>0)"的类型；不足 3 个则少显示几个，避免把"没测过的维度"当成最突出兴趣
+  const measured=order.filter(t=>I[t].answered>0);
+  const sorted=measured.slice().sort((a,b)=>{
+    const ra=I[a].insufficient? I[a].ratio*0.6 : I[a].ratio;  // 作答过少的类型降权，避免单题虚高挤掉正常类型
+    const rb=I[b].insufficient? I[b].ratio*0.6 : I[b].ratio;
+    return (rb-ra) || (I[b].sum-I[a].sum) || (a<b?-1:1);
+  });
   const top3=sorted.slice(0,3);
   const code=top3.join('');
-  // 分化度
   // 分化度：只对"确实测过(answered>0)"的类型计算，避免未测类型 ratio=0 把差值人为拉大
   const tested=order.filter(t=>I[t].answered>0);
   const diffVals=tested.map(t=>I[t].ratio);
-  const diff = diffVals.length? (Math.max(...diffVals)-Math.min(...diffVals)) : 0;
-  const diffLabel= diff>=0.5?'兴趣较集中': diff>=0.2?'兴趣分化中等':'兴趣尚未明显分化';
-  // 一致性（Holland 六边形 R-I-A-S-E-C）
+  const diff = diffVals.length>=2? (Math.max(...diffVals)-Math.min(...diffVals)) : 0;
+  const diffLabel= tested.length<2?'信息不足，无法判断兴趣分化': diff>=0.5?'兴趣较集中': diff>=0.2?'兴趣分化中等':'兴趣尚未明显分化';
+  // 一致性（Holland 六边形 R-I-A-S-E-C）；top3 不足 2 个测过类型时降级为"暂不判断"
   const pos={R:0,I:1,A:2,S:3,E:4,C:5};
-  const a=pos[top3[0]], b=pos[top3[1]];
-  let d=Math.abs(a-b); if(d>3)d=6-d;
-  let consLabel = d===1?'两型相邻，方向协调': d===3?'两型相对，存在内在张力':'两型中性，可兼顾';
+  let consLabel;
+  if(top3.length>=2){
+    const a=pos[top3[0]], b=pos[top3[1]];
+    let d=Math.abs(a-b); if(d>3)d=6-d;
+    consLabel = d===1?'两型相邻，方向协调': d===3?'两型相对，存在内在张力':'两型中性，可兼顾';
+  } else {
+    consLabel = '测过的类型不足，一致性暂不判断';
+  }
   // 发展阶段
   let stageSum=0, stageAns=0;
   STAGE.forEach((it,i)=>{ if(st.stage[i]!==undefined&&st.stage[i]!==null){ stageSum+=it.sc[st.stage[i]]; stageAns++; }});
@@ -377,9 +396,10 @@ function calcResult(persist, ext){
   else if(stageRatio>=0.25){ stageName='维持的情境兴趣'; stageAdv='现在更多是"觉得不错"，建议多尝试几种，先广泛体验再收敛。'; }
   else { stageName='刚被触发的兴趣'; stageAdv='可能只是一时好奇，建议低成本多试，别急着投入大量时间和钱。'; }
 
-  // 能力 TOP3
+  // 能力 TOP3：同样只取"自评过(answered>0)"的维度，未测维度不混入，也不被标"低"
   const abKeys=Object.keys(A);
-  const abSorted=abKeys.slice().sort((a,b)=>(A[b].ratio-A[a].ratio)||(A[b].sum-A[a].sum));
+  const abMeasured=abKeys.filter(k=>A[k].answered>0);
+  const abSorted=abMeasured.slice().sort((a,b)=>(A[b].ratio-A[a].ratio)||(A[b].sum-A[a].sum));
   const abTop3=abSorted.slice(0,3);
 
   /* ---------- 渲染 ---------- */
@@ -390,15 +410,16 @@ function calcResult(persist, ext){
     `<div class="sub">你的兴趣三字母码</div><div class="code">${code}</div>`+
     `<div class="row" style="justify-content:center;margin-top:8px;">`+
     `<span class="pill ${diff>=0.5?'high':diff>=0.2?'mid':'low'}">${diffLabel}</span>`+
-    `<span class="pill ${d===1?'high':d===3?'warn':'mid'}">${consLabel}</span>`+
-    (attentionOk?'':'<span class="pill warn">作答认真度偏低，结果仅供参考</span>')+
+    `<span class="pill ${consLabel.includes('协调')?'high':consLabel.includes('张力')?'warn':'mid'}">${consLabel}</span>`+
+    (attNull?'<span class="pill warn">检查题未作答，结果仅供参考</span>':(!attentionOk?'<span class="pill warn">作答认真度偏低，结果仅供参考</span>':''))+
     `</div>`;
   // 兴趣 TOP3
   let ht='<h2>你最突出的兴趣方向</h2>';
   top3.forEach((t,i)=>{
-    const cls=I[t].band==='高'?'high':I[t].band==='中'?'mid':'low';
+    const cls=I[t].insufficient?'warn':(I[t].band==='高'?'high':I[t].band==='中'?'mid':'low');
+    const bandTxt=I[t].insufficient?'信号偏弱':`${I[t].band} (${I[t].sum}分/${I[t].answered*4}满分)`;
     ht+=`<div class="box"><p style="margin:0 0 4px;"><strong>${i+1}. ${TYPE_NAME[t]}</strong> `+
-         `<span class="pill ${cls}">${I[t].band} (${I[t].sum}分/${I[t].answered*4}满分)</span></p>`+
+         `<span class="pill ${cls}">${bandTxt}</span></p>`+
          `<p style="margin:0;font-size:14px;">${TYPE_DESC[t]}</p>`+
          (I[t].insufficient?'<p class="sub" style="margin:4px 0 0;color:#b45309;">该题做过太少（选了多个"没试过"），信号偏弱。</p>':'')+
          `</div>`;
@@ -442,7 +463,7 @@ function calcResult(persist, ext){
   });
   document.getElementById('clue-box').innerHTML=hc;
 
-  lastResult={code,top3,I,A,abTop3,abKeys,diffLabel,consLabel,attentionOk,stageName,stageAdv,order};
+  lastResult={code,top3,I,A,abTop3,abKeys,diffLabel,consLabel,attentionOk,attNull,stageName,stageAdv,order};
   show('result');
   if(!ext){
     if(persist!==false) save();
@@ -496,10 +517,15 @@ const _esc = s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/
 let _mctx=null;
 function _meas(font){ if(!_mctx){_mctx=document.createElement('canvas').getContext('2d');} _mctx.font=font; return _mctx; }
 function _wrap(text,font,maxW){
-  const ctx=_meas(font||'normal 14px sans-serif'); const lines=[]; let line='';
-  for(const ch of String(text)){
-    const t=line+ch;
-    if(ctx.measureText(t).width>maxW && line){ lines.push(line); line=ch; } else line=t;
+  const ctx=_meas(font||'normal 14px sans-serif');
+  // 分词：CJK 与 CJK 标点逐字，连续英文/数字/百分号成词，其余标点单字——避免英文单词（如 DIY）被从中间拆开
+  const re=/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]|[A-Za-z0-9%]+|[^\s]/g;
+  const tokens=[]; let m; while((m=re.exec(String(text)))!==null) tokens.push(m[0]);
+  const lines=[]; let line='';
+  for(const tk of tokens){
+    const sep = /^[A-Za-z0-9%]+$/.test(tk) && line && /[A-Za-z0-9%]$/.test(line) ? ' ' : '';
+    const t=line+sep+tk;
+    if(ctx.measureText(t).width>maxW && line){ lines.push(line); line=tk; } else line=t;
   }
   if(line) lines.push(line);
   return lines;
@@ -519,7 +545,8 @@ function buildReportSVG(rep){
   ps.push({t:rep.diffLabel, ...P[dcls]});
   const ccls=rep.consLabel.includes('协调')?'high':rep.consLabel.includes('张力')?'warn':'mid';
   ps.push({t:rep.consLabel, ...P[ccls]});
-  if(!rep.attentionOk) ps.push({t:'作答认真度偏低，结果仅供参考', ...P.warn});
+  if(rep.attNull) ps.push({t:'检查题未作答，结果仅供参考', ...P.warn});
+  else if(!rep.attentionOk) ps.push({t:'作答认真度偏低，结果仅供参考', ...P.warn});
   y=pills(PAD, y, ps, 26); y+=10;
   const radarSVG=radar(rep.order.map(t=>rep.I[t].ratio), rep.order.map(t=>TYPE_NAME[t]+' '+t));
   const rx=(W-300)/2;
@@ -585,6 +612,7 @@ function svgToPng(svgStr,w,h){
   img.src=url;
 }
 function saveAsImage(){
+  if(viewOnly){ alert('这是他人分享的结果，为保护隐私暂不支持导出图片。'); return; }
   if(!lastResult){ alert('请先完成测评并查看结果。'); return; }
   const {svg,W,H}=buildReportSVG(lastResult);
   svgToPng(svg,W,H);
